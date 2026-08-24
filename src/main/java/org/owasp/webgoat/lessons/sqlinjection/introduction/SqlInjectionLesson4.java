@@ -56,6 +56,13 @@ public class SqlInjectionLesson4 extends AssignmentEndpoint {
   }
 
   protected AttackResult injectableQuery(String query) {
+    try {
+      // Validate that only ALTER TABLE queries are allowed to prevent abuse
+      SqlStatementValidator.validateAlterTableOnly(query);
+    } catch (SecurityException e) {
+      return failed(this).output("Invalid query: " + e.getMessage()).build();
+    }
+
     try (Connection connection = dataSource.getConnection()) {
       try (Statement statement =
           connection.createStatement(TYPE_SCROLL_INSENSITIVE, CONCUR_READ_ONLY)) {

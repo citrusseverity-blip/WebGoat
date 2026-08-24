@@ -73,6 +73,15 @@ public class SqlInjectionLesson5 extends AssignmentEndpoint {
   }
 
   protected AttackResult injectableQuery(String query) {
+    try {
+      // Validate that only GRANT queries are allowed to prevent abuse
+      SqlStatementValidator.validateGrantOnly(query);
+    } catch (SecurityException e) {
+      return failed(this)
+          .output("Invalid query: " + e.getMessage() + "<br> Your query was: " + query)
+          .build();
+    }
+
     try (Connection connection = dataSource.getConnection()) {
       try (Statement statement =
           connection.createStatement(

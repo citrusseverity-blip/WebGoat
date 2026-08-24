@@ -60,6 +60,16 @@ public class SqlInjectionLesson2 extends AssignmentEndpoint {
   }
 
   protected AttackResult injectableQuery(String query) {
+    try {
+      // Validate that only SELECT queries are allowed to prevent abuse
+      SqlStatementValidator.validateSelectOnly(query);
+    } catch (SecurityException e) {
+      return failed(this)
+          .feedback("sql-injection.2.failed")
+          .output("Invalid query: " + e.getMessage())
+          .build();
+    }
+
     try (var connection = dataSource.getConnection()) {
       Statement statement = connection.createStatement(TYPE_SCROLL_INSENSITIVE, CONCUR_READ_ONLY);
       ResultSet results = statement.executeQuery(query);
