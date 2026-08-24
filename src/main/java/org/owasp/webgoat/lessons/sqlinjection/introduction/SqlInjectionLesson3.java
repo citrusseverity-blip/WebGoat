@@ -55,6 +55,13 @@ public class SqlInjectionLesson3 extends AssignmentEndpoint {
   }
 
   protected AttackResult injectableQuery(String query) {
+    try {
+      // Validate that only UPDATE queries are allowed to prevent abuse
+      SqlStatementValidator.validateUpdateOnly(query);
+    } catch (SecurityException e) {
+      return failed(this).output("Invalid query: " + e.getMessage()).build();
+    }
+
     try (Connection connection = dataSource.getConnection()) {
       try (Statement statement =
           connection.createStatement(TYPE_SCROLL_INSENSITIVE, CONCUR_READ_ONLY)) {
