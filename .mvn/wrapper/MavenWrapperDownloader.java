@@ -17,6 +17,7 @@ import java.net.*;
 import java.io.*;
 import java.nio.channels.*;
 import java.util.Properties;
+import java.security.MessageDigest;
 
 public class MavenWrapperDownloader {
 
@@ -45,6 +46,11 @@ public class MavenWrapperDownloader {
      */
     private static final String PROPERTY_NAME_WRAPPER_URL = "wrapperUrl";
 
+    /**
+     * Name of the property for the expected SHA-256 checksum of the wrapper JAR.
+     */
+    private static final String PROPERTY_NAME_WRAPPER_SHA256SUM = "wrapperSha256Sum";
+
     public static void main(String args[]) {
         System.out.println("- Downloader started");
         File baseDirectory = new File(args[0]);
@@ -54,6 +60,7 @@ public class MavenWrapperDownloader {
         // wrapperUrl parameter.
         File mavenWrapperPropertyFile = new File(baseDirectory, MAVEN_WRAPPER_PROPERTIES_PATH);
         String url = DEFAULT_DOWNLOAD_URL;
+        String expectedSha256Sum = null;
         if(mavenWrapperPropertyFile.exists()) {
             FileInputStream mavenWrapperPropertyFileInputStream = null;
             try {
@@ -61,6 +68,7 @@ public class MavenWrapperDownloader {
                 Properties mavenWrapperProperties = new Properties();
                 mavenWrapperProperties.load(mavenWrapperPropertyFileInputStream);
                 url = mavenWrapperProperties.getProperty(PROPERTY_NAME_WRAPPER_URL, url);
+                expectedSha256Sum = mavenWrapperProperties.getProperty(PROPERTY_NAME_WRAPPER_SHA256SUM);
             } catch (IOException e) {
                 System.out.println("- ERROR loading '" + MAVEN_WRAPPER_PROPERTIES_PATH + "'");
             } finally {
@@ -85,6 +93,23 @@ public class MavenWrapperDownloader {
         System.out.println("- Downloading to: " + outputFile.getAbsolutePath());
         try {
             downloadFileFromURL(url, outputFile);
+            
+            // Verify checksum if provided
+            if (expectedSha256Sum != null && !expectedSha256Sum.trim().isEmpty()) {
+                System.out.println("- Verifying checksum...");
+                String actualSha256Sum = calculateSHA256(outputFile);
+                if (!expectedSha256Sum.equalsIgnoreCase(actualSha256Sum)) {
+                    System.out.println("- ERROR: Checksum verification failed!");
+                    System.out.println("  Expected: " + expectedSha256Sum);
+                    System.out.println("  Actual:   " + actualSha256Sum);
+                    outputFile.delete();
+                    System.exit(1);
+                }
+                System.out.println("- Checksum verification passed");
+            } else {
+                System.out.println("- WARNING: No checksum provided, skipping verification");
+            }
+            
             System.out.println("Done");
             System.exit(0);
         } catch (Throwable e) {
@@ -112,6 +137,23 @@ public class MavenWrapperDownloader {
         fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
         fos.close();
         rbc.close();
+    }
+
+    private static String calculateSHA256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        FileInputStream fis = new FileInputStream(file);
+        byte[] byteArray = new byte[8192];
+        int bytesRead;
+        while ((bytesRead = fis.read(byteArray)) != -1) {
+            digest.update(byteArray, 0, bytesRead);
+        }
+        fis.close();
+        byte[] bytes = digest.digest();
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
 }
