@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -39,13 +40,37 @@ public class ProfileUploadBase extends AssignmentEndpoint {
     File uploadDirectory = cleanupAndCreateDirectoryForUser();
 
     try {
-      var uploadedFile = new File(uploadDirectory, fullName);
+      // Check if path traversal was attempted (for lesson detection)
+      var intendedFile = new File(uploadDirectory, fullName);
+      boolean traversalAttempted = attemptWasMade(uploadDirectory, intendedFile);
+      
+      if (traversalAttempted) {
+        // Path traversal detected - mark lesson as solved but prevent the actual write
+        return solvedIt(intendedFile);
+      }
+      
+      // Validate and sanitize the filename to prevent path traversal
+      String sanitizedFilename = sanitizeFilename(fullName);
+      if (sanitizedFilename == null || sanitizedFilename.isEmpty()) {
+        return failed(this)
+            .feedback("path-traversal-profile-invalid-filename")
+            .build();
+      }
+      
+      // Create the file with the sanitized filename
+      var uploadedFile = new File(uploadDirectory, sanitizedFilename);
+      
+      // Final validation: ensure the canonical path is within the upload directory
+      if (!isWithinDirectory(uploadDirectory, uploadedFile)) {
+        return failed(this)
+            .feedback("path-traversal-profile-invalid-path")
+            .build();
+      }
+      
+      // Safe to create and write the file
       uploadedFile.createNewFile();
       FileCopyUtils.copy(file.getBytes(), uploadedFile);
 
-      if (attemptWasMade(uploadDirectory, uploadedFile)) {
-        return solvedIt(uploadedFile);
-      }
       return informationMessage(this)
           .feedback("path-traversal-profile-updated")
           .feedbackArgs(uploadedFile.getAbsoluteFile())
@@ -54,6 +79,47 @@ public class ProfileUploadBase extends AssignmentEndpoint {
     } catch (IOException e) {
       return failed(this).output(e.getMessage()).build();
     }
+  }
+  
+  /**
+   * Sanitizes a filename by removing path components and keeping only the base filename.
+   * This prevents path traversal attacks by stripping directory separators and parent references.
+   * 
+   * @param filename the filename to sanitize
+   * @return the sanitized filename containing only the base name, or null if invalid
+   */
+  private String sanitizeFilename(String filename) {
+    if (filename == null || filename.isEmpty()) {
+      return null;
+    }
+    
+    // Use FilenameUtils to extract just the base name, removing any path components
+    String baseName = FilenameUtils.getName(filename);
+    
+    // Additional validation: reject if the result is empty or contains suspicious patterns
+    if (baseName == null || baseName.isEmpty() || baseName.equals(".") || baseName.equals("..")) {
+      return null;
+    }
+    
+    return baseName;
+  }
+  
+  /**
+   * Validates that a file is within the specified directory by comparing canonical paths.
+   * This prevents path traversal attacks by ensuring the resolved path stays within bounds.
+   * 
+   * @param directory the directory that should contain the file
+   * @param file the file to validate
+   * @return true if the file is within the directory, false otherwise
+   * @throws IOException if an I/O error occurs while resolving canonical paths
+   */
+  private boolean isWithinDirectory(File directory, File file) throws IOException {
+    String canonicalDirectory = directory.getCanonicalPath();
+    String canonicalFile = file.getCanonicalPath();
+    
+    // Ensure the file's canonical path starts with the directory's canonical path
+    // and is not equal to it (file must be inside, not the directory itself)
+    return canonicalFile.startsWith(canonicalDirectory + File.separator);
   }
 
   @SneakyThrows
