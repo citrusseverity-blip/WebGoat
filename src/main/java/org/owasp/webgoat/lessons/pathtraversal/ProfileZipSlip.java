@@ -63,14 +63,37 @@ public class ProfileZipSlip extends ProfileUploadBase {
     var currentImage = getProfilePictureAsBase64();
 
     try {
-      var uploadedZipFile = tmpZipDirectory.resolve(file.getOriginalFilename());
+      // Validate and sanitize the uploaded filename to prevent path traversal
+      String sanitizedFilename = sanitizeFilename(file.getOriginalFilename());
+      var uploadedZipFile = tmpZipDirectory.resolve(sanitizedFilename);
+      
+      // Ensure the resolved path is within the temporary directory
+      if (!isWithinDirectory(tmpZipDirectory.toFile(), uploadedZipFile.toFile())) {
+        return failed(this).output("Invalid file path").build();
+      }
+      
       FileCopyUtils.copy(file.getBytes(), uploadedZipFile.toFile());
 
       ZipFile zip = new ZipFile(uploadedZipFile.toFile());
       Enumeration<? extends ZipEntry> entries = zip.entries();
       while (entries.hasMoreElements()) {
         ZipEntry e = entries.nextElement();
+        
+        // Validate ZIP entry name to prevent path traversal (Zip Slip vulnerability)
         File f = new File(tmpZipDirectory.toFile(), e.getName());
+        
+        // Check if the canonical path of the extracted file is within the temporary directory
+        if (!isWithinDirectory(tmpZipDirectory.toFile(), f)) {
+          log.warn("Zip Slip attempt detected: entry '{}' would extract outside temporary directory", e.getName());
+          continue; // Skip this entry
+        }
+        
+        // Create parent directories if needed
+        File parentDir = f.getParentFile();
+        if (parentDir != null && !parentDir.exists()) {
+          parentDir.mkdirs();
+        }
+        
         InputStream is = zip.getInputStream(e);
         Files.copy(is, f.toPath(), StandardCopyOption.REPLACE_EXISTING);
       }
@@ -79,6 +102,39 @@ public class ProfileZipSlip extends ProfileUploadBase {
     } catch (IOException e) {
       return failed(this).output(e.getMessage()).build();
     }
+  }
+
+  /**
+   * Validates that a file is within a specified directory to prevent path traversal attacks.
+   * 
+   * @param directory the parent directory
+   * @param file the file to validate
+   * @return true if the file is within the directory, false otherwise
+   * @throws IOException if an I/O error occurs
+   */
+  private boolean isWithinDirectory(File directory, File file) throws IOException {
+    String canonicalDirectory = directory.getCanonicalPath();
+    String canonicalFile = file.getCanonicalPath();
+    return canonicalFile.startsWith(canonicalDirectory + File.separator) 
+        || canonicalFile.equals(canonicalDirectory);
+  }
+
+  /**
+   * Sanitizes a filename by removing path components and keeping only the base name.
+   * 
+   * @param filename the filename to sanitize
+   * @return the sanitized filename
+   */
+  private String sanitizeFilename(String filename) {
+    if (filename == null) {
+      return "upload.zip";
+    }
+    // Remove any path components and keep only the filename
+    File f = new File(filename);
+    String name = f.getName();
+    // Additional safety: remove any remaining path separators
+    name = name.replaceAll("[/\\\\]", "_");
+    return name.isEmpty() ? "upload.zip" : name;
   }
 
   private AttackResult isSolved(byte[] currentImage, byte[] newImage) {
