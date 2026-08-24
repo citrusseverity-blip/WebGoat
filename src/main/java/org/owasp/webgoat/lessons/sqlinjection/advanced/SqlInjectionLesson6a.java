@@ -22,7 +22,11 @@
 
 package org.owasp.webgoat.lessons.sqlinjection.advanced;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import org.owasp.webgoat.container.LessonDataSource;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
@@ -63,15 +67,16 @@ public class SqlInjectionLesson6a extends AssignmentEndpoint {
     String query = "";
     try (Connection connection = dataSource.getConnection()) {
       boolean usedUnion = true;
-      query = "SELECT * FROM user_data WHERE last_name = '" + accountName + "'";
+      query = "SELECT * FROM user_data WHERE last_name = ?";
       // Check if Union is used
       if (!accountName.matches("(?i)(^[^-/*;)]*)(\\s*)UNION(.*$)")) {
         usedUnion = false;
       }
-      try (Statement statement =
-          connection.createStatement(
-              ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY)) {
-        ResultSet results = statement.executeQuery(query);
+      try (PreparedStatement statement =
+          connection.prepareStatement(
+              query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY)) {
+        statement.setString(1, accountName);
+        ResultSet results = statement.executeQuery();
 
         if ((results != null) && results.first()) {
           ResultSetMetaData resultsMetaData = results.getMetaData();
