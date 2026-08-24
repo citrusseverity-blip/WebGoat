@@ -216,9 +216,11 @@ else
     else
       jarUrl="https://repo.maven.apache.org/maven2/io/takari/maven-wrapper/0.5.5/maven-wrapper-0.5.5.jar"
     fi
+    expectedChecksum=""
     while IFS="=" read key value; do
-      case "$key" in (wrapperUrl) jarUrl="$value"; break ;;
+      case "$key" in (wrapperUrl) jarUrl="$value"; ;;
       esac
+      case "$key" in (wrapperSha256Sum) expectedChecksum="$value"; ;;
     done < "$BASE_DIR/.mvn/wrapper/maven-wrapper.properties"
     if [ "$MVNW_VERBOSE" = true ]; then
       echo "Downloading from: $jarUrl"
@@ -237,6 +239,7 @@ else
         else
             wget --http-user=$MVNW_USERNAME --http-password=$MVNW_PASSWORD "$jarUrl" -O "$wrapperJarPath"
         fi
+        downloadStatus=$?
     elif command -v curl > /dev/null; then
         if [ "$MVNW_VERBOSE" = true ]; then
           echo "Found curl ... using curl"
@@ -246,7 +249,7 @@ else
         else
             curl --user $MVNW_USERNAME:$MVNW_PASSWORD -o "$wrapperJarPath" "$jarUrl" -f
         fi
-
+        downloadStatus=$?
     else
         if [ "$MVNW_VERBOSE" = true ]; then
           echo "Falling back to using Java to download"
@@ -272,6 +275,37 @@ else
                 ("$JAVA_HOME/bin/java" -cp .mvn/wrapper MavenWrapperDownloader "$MAVEN_PROJECTBASEDIR")
             fi
         fi
+        downloadStatus=$?
+    fi
+    
+    # Verify checksum if download was successful and checksum is provided
+    if [ $downloadStatus -eq 0 ] && [ -n "$expectedChecksum" ]; then
+        if [ "$MVNW_VERBOSE" = true ]; then
+          echo "Verifying checksum..."
+        fi
+        if command -v shasum > /dev/null; then
+            actualChecksum=$(shasum -a 256 "$wrapperJarPath" | awk '{print $1}')
+        elif command -v sha256sum > /dev/null; then
+            actualChecksum=$(sha256sum "$wrapperJarPath" | awk '{print $1}')
+        else
+            echo "Warning: No checksum utility found (shasum or sha256sum), skipping verification"
+            actualChecksum=""
+        fi
+        
+        if [ -n "$actualChecksum" ]; then
+            if [ "$expectedChecksum" != "$actualChecksum" ]; then
+                echo "Error: Checksum verification failed!" >&2
+                echo "  Expected: $expectedChecksum" >&2
+                echo "  Actual:   $actualChecksum" >&2
+                rm -f "$wrapperJarPath"
+                exit 1
+            fi
+            if [ "$MVNW_VERBOSE" = true ]; then
+              echo "Checksum verification passed"
+            fi
+        fi
+    elif [ -n "$expectedChecksum" ]; then
+        echo "Warning: Download failed, skipping checksum verification"
     fi
 fi
 ##########################################################################################

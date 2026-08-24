@@ -121,9 +121,11 @@ set WRAPPER_JAR="%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.jar"
 set WRAPPER_LAUNCHER=org.apache.maven.wrapper.MavenWrapperMain
 
 set DOWNLOAD_URL="https://repo.maven.apache.org/maven2/io/takari/maven-wrapper/0.5.5/maven-wrapper-0.5.5.jar"
+set WRAPPER_SHA256SUM=
 
 FOR /F "tokens=1,2 delims==" %%A IN ("%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.properties") DO (
     IF "%%A"=="wrapperUrl" SET DOWNLOAD_URL=%%B
+    IF "%%A"=="wrapperSha256Sum" SET WRAPPER_SHA256SUM=%%B
 )
 
 @REM Extension to allow automatically downloading the maven-wrapper.jar from Maven-central
@@ -148,6 +150,33 @@ if exist %WRAPPER_JAR% (
 		"}"^
 		"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $webclient.DownloadFile('%DOWNLOAD_URL%', '%WRAPPER_JAR%')"^
 		"}"
+    
+    @REM Verify checksum if provided
+    if not "%WRAPPER_SHA256SUM%" == "" (
+        if "%MVNW_VERBOSE%" == "true" (
+            echo Verifying checksum...
+        )
+        powershell -Command "&{"^
+            "$hash = (Get-FileHash -Path '%WRAPPER_JAR%' -Algorithm SHA256).Hash.ToLower();"^
+            "$expected = '%WRAPPER_SHA256SUM%'.ToLower();"^
+            "if ($hash -ne $expected) {"^
+            "Write-Host 'Error: Checksum verification failed!' -ForegroundColor Red;"^
+            "Write-Host '  Expected: ' $expected -ForegroundColor Red;"^
+            "Write-Host '  Actual:   ' $hash -ForegroundColor Red;"^
+            "Remove-Item '%WRAPPER_JAR%' -Force;"^
+            "exit 1;"^
+            "}"^
+            "}"
+        if errorlevel 1 goto error
+        if "%MVNW_VERBOSE%" == "true" (
+            echo Checksum verification passed
+        )
+    ) else (
+        if "%MVNW_VERBOSE%" == "true" (
+            echo Warning: No checksum provided, skipping verification
+        )
+    )
+    
     if "%MVNW_VERBOSE%" == "true" (
         echo Finished downloading %WRAPPER_JAR%
     )
